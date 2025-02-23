@@ -257,7 +257,7 @@ shuffle12_avx2(uint8_t* const dest, const uint8_t* const src,
       ymm1[k * 2 + 1] = _mm256_unpackhi_epi32(ymm0[l], ymm0[l + 4]);
     }
     for (k = 0; k < 16; k++) {
-      printymm32("Q",ymm0[k]);
+      printymm32("2C",ymm1[k]);
     }
 
     /* Transpose quad words */
@@ -266,19 +266,49 @@ shuffle12_avx2(uint8_t* const dest, const uint8_t* const src,
       ymm0[k * 2 + 1] = _mm256_unpackhi_epi64(ymm1[k], ymm1[k + 8]);
     }
     for (k = 0; k < 16; k++) {
+      printf("kk:%d\n",k);
       printymm32("A",ymm0[k]);
       ymm0[k] = _mm256_permute4x64_epi64(ymm0[k], 0xd8);
       printymm32("B",ymm0[k]);
-      ymm0[k] = _mm256_shuffle_epi8(ymm0[k], shmask);
+      //ymm0[k] = _mm256_shuffle_epi8(ymm0[k], shmask);
       printymm32("C",ymm0[k]);
     }
+
+    printymm32("D",ymm0[12]);
+    printymm32("E",ymm0[13]);
+
+    ymm1[0] = _mm256_unpacklo_epi8(ymm0[0], ymm0[12]);
+    //ymm1[12] = _mm256_unpackhi_epi8(ymm0[0], ymm0[12]);
+    printymm32("F",ymm0[1]);
+    printymm32("G",ymm0[13]);
+    ymm1[1] = _mm256_unpacklo_epi8(ymm0[1], ymm0[13]);
+    //ymm1[13] = _mm256_unpackhi_epi8(ymm0[1], ymm0[13]);
+
+    ymm1[2] = _mm256_unpacklo_epi8(ymm0[2], ymm0[14]);
+    //ymm1[14] = _mm256_unpackhi_epi8(ymm0[2], ymm0[14]);
+
+    ymm1[3] = _mm256_unpacklo_epi8(ymm0[3], ymm0[15]);
+    //ymm1[15] = _mm256_unpackhi_epi8(ymm0[3], ymm0[15]);
+
+    ymm1[4] =   _mm256_unpacklo_epi16(ymm0[4], ymm0[12]);
+
+
+    printymm32("F2",ymm0[1]);
+    printymm32("G2",ymm0[13]);
+
+    //ymm0[12] = _mm256_unpacklo_epi8(ymm0[12], ymm0[13]);
+    //ymm0[13] = _mm256_unpackhi_epi8(ymm0[12], ymm0[13]);
     /* Store the result vectors */
     size_t offset = (j/16)*bytesoftype;
     uint8_t* const dest_for_jth_element = dest + j;
-    for (k = 0; k < bytesoftype; k++) {
-      printf("k:%d, %d, %zu, %d\n",k, k * total_elements, offset, j);
-      _mm256_storeu_si256((__m256i*)(dest_for_jth_element + (k * total_elements)), ymm0[k]);
-    }
+    _mm256_storeu_si256((__m256i*)(dest_for_jth_element + (0 * total_elements)), ymm1[0]);
+    _mm256_storeu_si256((__m256i*)(dest_for_jth_element + (1 * total_elements)), ymm1[1]);
+    _mm256_storeu_si256((__m256i*)(dest_for_jth_element + (2 * total_elements)), ymm1[2]);
+    _mm256_storeu_si256((__m256i*)(dest_for_jth_element + (3 * total_elements)), ymm1[3]);
+    //for (k = 0; k < 12; k++) {
+    //  printf("k:%d, %d, %zu, %d\n",k, k * total_elements, offset, j);
+    //  _mm256_storeu_si256((__m256i*)(dest_for_jth_element + (k * total_elements)), ymm0[k]);
+    //}
   }
 }
 
