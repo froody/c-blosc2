@@ -292,7 +292,7 @@ shuffle12_avx2(uint8_t* const dest, const uint8_t* const src,
 
     //
     printymm32("xH",ymm0[0]);
-    ymm0[0] = _mm256_permute4x64_epi64(ymm0[0], 0b00101101);
+    ymm0[0] = _mm256_permute4x64_epi64(ymm0[0], 0b00111001);
 
     printymm32("H",ymm0[0]);
     ymm1[4] =   _mm256_unpacklo_epi8(ymm0[4], ymm0[0]);
