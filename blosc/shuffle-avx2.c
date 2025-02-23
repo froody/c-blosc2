@@ -13,23 +13,24 @@
 #include <stdlib.h>
 
 /* Make sure AVX2 is available for the compilation target and compiler. */
-#if defined(__AVX2__)
+#if 1// defined(__AVX2__)
 
 #include <immintrin.h>
 
 #include <stdint.h>
 
 /* The next is useful for debugging purposes */
-#if 0
+#if 1
 #include <stdio.h>
 #include <string.h>
 
-static void printymm32(__m256i ymm0)
+static void printymm32(char *key, __m256i ymm0)
 {
   uint32_t buf[8];
 
   ((__m256i *)buf)[0] = ymm0;
-  fprintf(stderr, "%x,%x,%x,%x,%x,%x,%x,%x\n",
+  fprintf(stderr, "%s:%x,%x,%x,%x,%x,%x,%x,%x\n",
+        key,
           buf[0], buf[1], buf[2], buf[3],
           buf[4], buf[5], buf[6], buf[7]);
 }
@@ -197,6 +198,85 @@ shuffle8_avx2(uint8_t* const dest, const uint8_t* const src,
     /* Store the result vectors */
     uint8_t* const dest_for_jth_element = dest + j;
     for (k = 0; k < 8; k++) {
+      _mm256_storeu_si256((__m256i*)(dest_for_jth_element + (k * total_elements)), ymm0[k]);
+    }
+  }
+}
+
+/* Routine optimized for shuffling a buffer for a type size of 16 bytes. */
+static void
+shuffle12_avx2(uint8_t* const dest, const uint8_t* const src,
+               const int32_t vectorizable_elements, const int32_t total_elements) {
+  static const int32_t bytesoftype = 12;
+  int step = 24;
+  int32_t j;
+  int k, l;
+  __m256i ymm0[16], ymm1[16];
+
+  /* Create the shuffle mask.
+     NOTE: The XMM/YMM 'set' intrinsics require the arguments to be ordered from
+     most to least significant (i.e., their order is reversed when compared to
+     loading the mask from an array). */
+  const __m256i shmask = _mm256_set_epi8(
+      0x0f, 0x07, 0x0e, 0x06, 0x0d, 0x05, 0x0c, 0x04,
+      0x0b, 0x03, 0x0a, 0x02, 0x09, 0x01, 0x08, 0x00,
+      0x0f, 0x07, 0x0e, 0x06, 0x0d, 0x05, 0x0c, 0x04,
+      0x0b, 0x03, 0x0a, 0x02, 0x09, 0x01, 0x08, 0x00);
+
+  for (j = 0; j < vectorizable_elements; j += sizeof(__m256i)) {
+    /* Fetch 32 elements (512 bytes) into 16 YMM registers. */
+    const uint8_t* const src_for_ith_element = src + j;
+    for (k = 0; k < 16; k++) {
+      ymm0[k] = _mm256_loadu_si256((__m256i*)(src + (j * bytesoftype) + (k * step)));
+      printymm32("I",ymm0[k]);
+    }
+    /* Transpose bytes */
+    for (k = 0, l = 0; k < 8; k++, l += 2) {
+      ymm1[k * 2] = _mm256_unpacklo_epi8(ymm0[l], ymm0[l + 1]);
+      ymm1[k * 2 + 1] = _mm256_unpackhi_epi8(ymm0[l], ymm0[l + 1]);
+    }
+    for (k = 0; k < bytesoftype; k++) {
+      printymm32("1B",ymm1[k]);
+    }
+    /* Transpose words */
+    for (k = 0, l = -2; k < 8; k++, l++) {
+      if ((k % 2) == 0) l += 2;
+      //printf("k:%d, l:%d\n",k,l);
+      ymm0[k * 2] = _mm256_unpacklo_epi16(ymm1[l], ymm1[l + 2]);
+      ymm0[k * 2 + 1] = _mm256_unpackhi_epi16(ymm1[l], ymm1[l + 2]);
+    }
+
+    for (k = 0; k < bytesoftype; k++) {
+      printymm32("2B",ymm0[k]);
+    }
+    /* Transpose double words */
+    for (k = 0, l = -4; k < 8; k++, l++) {
+      if ((k % 4) == 0) l += 4;
+      printf("k:%d, l:%d\n",k,l);
+      ymm1[k * 2] = _mm256_unpacklo_epi32(ymm0[l], ymm0[l + 4]);
+      ymm1[k * 2 + 1] = _mm256_unpackhi_epi32(ymm0[l], ymm0[l + 4]);
+    }
+    for (k = 0; k < 16; k++) {
+      printymm32("Q",ymm0[k]);
+    }
+
+    /* Transpose quad words */
+    for (k = 0; k < 8; k++) {
+      ymm0[k * 2] = _mm256_unpacklo_epi64(ymm1[k], ymm1[k + 8]);
+      ymm0[k * 2 + 1] = _mm256_unpackhi_epi64(ymm1[k], ymm1[k + 8]);
+    }
+    for (k = 0; k < 16; k++) {
+      printymm32("A",ymm0[k]);
+      ymm0[k] = _mm256_permute4x64_epi64(ymm0[k], 0xd8);
+      printymm32("B",ymm0[k]);
+      ymm0[k] = _mm256_shuffle_epi8(ymm0[k], shmask);
+      printymm32("C",ymm0[k]);
+    }
+    /* Store the result vectors */
+    size_t offset = (j/16)*bytesoftype;
+    uint8_t* const dest_for_jth_element = dest + j;
+    for (k = 0; k < bytesoftype; k++) {
+      printf("k:%d, %d, %zu, %d\n",k, k * total_elements, offset, j);
       _mm256_storeu_si256((__m256i*)(dest_for_jth_element + (k * total_elements)), ymm0[k]);
     }
   }
@@ -582,8 +662,6 @@ unshuffle12_avx2(uint8_t* const dest, const uint8_t* const src,
       ymm1[j + 8] = _mm256_permute2x128_si256(ymm0[j], ymm0[j + 8], 0x31);
       ymm1[j] = _mm256_permutevar8x32_epi32(ymm1[j], permute);
       ymm1[j+8] = _mm256_permutevar8x32_epi32(ymm1[j+8], permute);
-
-
     }
     _mm256_storeu_si256((__m256i*)(dest + (i * bytesoftype) + (0 * jump)), ymm1[0]);
     _mm256_storeu_si256((__m256i*)(dest + (i * bytesoftype) + (1 * jump)), ymm1[4]);
@@ -748,6 +826,9 @@ shuffle_avx2(const int32_t bytesoftype, const int32_t blocksize,
       break;
     case 8:
       shuffle8_avx2(_dest, _src, vectorizable_elements, total_elements);
+      break;
+    case 12:
+      shuffle12_avx2(_dest, _src, vectorizable_elements, total_elements);
       break;
     case 16:
       shuffle16_avx2(_dest, _src, vectorizable_elements, total_elements);

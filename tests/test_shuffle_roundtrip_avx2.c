@@ -31,16 +31,28 @@
 /** Roundtrip tests for the AVX2-accelerated shuffle/unshuffle. */
 static int test_shuffle_roundtrip_avx2(int32_t type_size, int32_t num_elements,
                                        size_t buffer_alignment, int test_type) {
-#if defined(SHUFFLE_USE_AVX2)
+#if 1 //defined(SHUFFLE_USE_AVX2)
   int32_t buffer_size = type_size * num_elements;
 
   /* Allocate memory for the test. */
   void* original = blosc_test_malloc(buffer_alignment, (size_t)buffer_size);
   void* shuffled = blosc_test_malloc(buffer_alignment, (size_t)buffer_size);
   void* unshuffled = blosc_test_malloc(buffer_alignment, (size_t)buffer_size);
+  void* expected_shuffled = blosc_test_malloc(buffer_alignment, (size_t)buffer_size);
 
   /* Fill the input data buffer with random values. */
   blosc_test_fill_random(original, (size_t)buffer_size);
+#if 0
+  for (int i = 0; i < num_elements; i++) {
+    for (int j = 0; j < type_size; j++) {
+      ((uint8_t*)original)[i*type_size + j] = (uint8_t)(j);
+    }
+  }
+#endif
+
+  fprintf(stdout, "Running shuffle/unshuffle roundtrip test with:\n");
+
+  shuffle_generic(type_size, buffer_size, original, expected_shuffled);
 
   /* Shuffle/unshuffle, selecting the implementations based on the test type. */
   switch(test_type)
@@ -70,10 +82,23 @@ static int test_shuffle_roundtrip_avx2(int32_t type_size, int32_t num_elements,
   int exit_code = memcmp(original, unshuffled, (size_t)buffer_size) ?
     EXIT_FAILURE : EXIT_SUCCESS;
 
+  if (exit_code == EXIT_FAILURE) {
+    fprintf(stdout, "Original and unshuffled buffers do not match.\n");
+    for (int i = 0; i < buffer_size/4; i++) {
+      int equal = ((uint32_t*)expected_shuffled)[i] == ((uint32_t*)shuffled)[i];
+      fprintf(stdout, "32[%d] %d, = %x : %x\n", i, equal, ((uint32_t*)expected_shuffled)[i], ((uint32_t*)shuffled)[i]);
+    }
+    for (int i = 0; i < buffer_size; i++) {
+      int equal = ((uint8_t*)expected_shuffled)[i] == ((uint8_t*)shuffled)[i];
+      fprintf(stdout, "[%d] %d, = %x : %x\n", i, equal, ((uint8_t*)expected_shuffled)[i], ((uint8_t*)shuffled)[i]);
+    }
+  }
+
   /* Free allocated memory. */
   blosc_test_free(original);
   blosc_test_free(shuffled);
   blosc_test_free(unshuffled);
+  blosc_test_free(expected_shuffled);
 
   return exit_code;
 #else

@@ -69,6 +69,18 @@ static int test_shuffle_roundtrip_sse2(int32_t type_size, int32_t num_elements,
   int exit_code = memcmp(original, unshuffled, (size_t)buffer_size) ?
                   EXIT_FAILURE : EXIT_SUCCESS;
 
+  if (exit_code == EXIT_FAILURE) {
+    fprintf(stdout, "Original and unshuffled buffers do not match.\n");
+    for (int i = 0; i < buffer_size/4; i++) {
+      int equal = ((uint32_t*)original)[i] == ((uint32_t*)unshuffled)[i];
+      fprintf(stdout, "32[%d] %d, = %x : %x\n", i, equal, ((uint32_t*)original)[i], ((uint32_t*)unshuffled)[i]);
+    }
+    for (int i = 0; i < buffer_size; i++) {
+      int equal = ((uint8_t*)original)[i] == ((uint8_t*)unshuffled)[i];
+      fprintf(stdout, "[%d] %d, = %x : %x\n", i, equal, ((uint8_t*)original)[i], ((uint8_t*)unshuffled)[i]);
+    }
+  }
+
   /* Free allocated memory. */
   blosc_test_free(original);
   blosc_test_free(shuffled);
