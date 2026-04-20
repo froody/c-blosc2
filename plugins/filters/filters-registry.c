@@ -5,12 +5,13 @@
 */
 
 #include "blosc2/filters-registry.h"
-#include "ndmean/ndmean.h"
-#include "ndcell/ndcell.h"
-#include "bytedelta/bytedelta.h"
-#include "int_trunc/int_trunc.h"
 #include "blosc-private.h"
 #include "blosc2.h"
+#include "bytedelta/bytedelta.h"
+#include "cat_pack/cat_pack.h"
+#include "int_trunc/int_trunc.h"
+#include "ndcell/ndcell.h"
+#include "ndmean/ndmean.h"
 
 void register_filters(void) {
 
@@ -56,4 +57,11 @@ void register_filters(void) {
   int_trunc.backward = &int_trunc_backward;
   register_filter_private(&int_trunc);
 
+  blosc2_filter cat_pack;
+  cat_pack.id = BLOSC_FILTER_CAT_PACK;
+  cat_pack.name = "cat_pack";
+  cat_pack.version = 1;
+  cat_pack.forward = &cat_pack_forward;
+  cat_pack.backward = &cat_pack_backward;
+  register_filter_private(&cat_pack);
 }
